@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -21,16 +22,24 @@ public class Data
     [Function("Data")]
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequest req)
     {
-        var events = await eventRepository.ReadAllEvents();
-
-        DataObject data = new DataObject()
-        {
-            Programs = events.Where(e => e.PartitionKey == "Program").ToArray(),
-            Activities = events.Where(e => e.PartitionKey == "Aktivitet").ToArray()
-        };
-
         _logger.LogInformation("C# HTTP trigger function processed a request.");
-        return new OkObjectResult(data);
+        try
+        {
+            var events = await eventRepository.ReadAllEvents();
+
+            DataObject data = new DataObject()
+            {
+                Programs = events.Where(e => e.PartitionKey == "Program").ToArray(),
+                Activities = events.Where(e => e.PartitionKey == "Aktivitet").ToArray()
+            };
+
+            return new OkObjectResult(data);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex.Message);
+            return new BadRequestResult();
+        }
     }
 
     private class DataObject
