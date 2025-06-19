@@ -4,6 +4,6 @@ namespace Seniorfestival.Data.Repositories
 {
     public interface IEventRepository
     {
-        Task<Evento[]> ReadAllEvents();
+        Task<Event[]> ReadAllEvents();
     }
 }

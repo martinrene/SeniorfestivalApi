@@ -3,7 +3,7 @@ using Seniorfestival.Data.Models.Base;
 namespace Seniorfestival.Data.Models
 {
     [Table("Events2")]
-    public class Evento : EntityBase
+    public class Event : EntityBase
     {
         public string? Start { get; set; }
         public string? End { get; set; }

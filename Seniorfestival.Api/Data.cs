@@ -12,11 +12,15 @@ public class Data
 {
     private readonly ILogger<Data> _logger;
     private readonly IEventRepository eventRepository;
+    private readonly ISettingRepository settingRepository;
+    private readonly ITextRepository textRepository;
 
-    public Data(ILogger<Data> logger, IEventRepository eventRepository)
+    public Data(ILogger<Data> logger, IEventRepository eventRepository, ISettingRepository settingRepository, ITextRepository textRepository)
     {
         _logger = logger;
         this.eventRepository = eventRepository;
+        this.settingRepository = settingRepository;
+        this.textRepository = textRepository;
     }
 
     [Function("Data")]
@@ -29,8 +33,11 @@ public class Data
 
             DataObject data = new DataObject()
             {
-                Programs = events.Where(e => e.PartitionKey == "Program").ToArray(),
-                Activities = events.Where(e => e.PartitionKey == "Aktivitet").ToArray()
+                ScheduleEvents = events.Where(e => e.PartitionKey == "Program").ToArray(),
+                ActivityEvents = events.Where(e => e.PartitionKey == "Aktivitet").ToArray(),
+                Settings = await settingRepository.ReadAllSettings(),
+                Texts = await textRepository.ReadAllTexts()
+
             };
 
             return new OkObjectResult(data);
@@ -44,8 +51,10 @@ public class Data
 
     private class DataObject
     {
-        public Evento[] Programs { get; set; } = [];
-        public Evento[] Activities { get; set; } = [];
+        public Event[] ScheduleEvents { get; set; } = [];
+        public Event[] ActivityEvents { get; set; } = [];
+        public Setting[] Settings { get; set; } = [];
+        public Text[] Texts { get; set; } = [];
 
     }
 }

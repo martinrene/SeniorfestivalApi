@@ -3,16 +3,16 @@ using Seniorfestival.Data.Persistence;
 
 namespace Seniorfestival.Data.Repositories
 {
-    public class EventRepository : IEventRepository
+    public class SettingRepository : ISettingRepository
     {
-        private readonly ITableRepository<Event> repository;
+        private readonly ITableRepository<Setting> repository;
 
-        public EventRepository(ITableRepository<Event> repository)
+        public SettingRepository(ITableRepository<Setting> repository)
         {
             this.repository = repository;
         }
 
-        public async Task<Event[]> ReadAllEvents()
+        public async Task<Setting[]> ReadAllSettings()
         {
             return (await repository.GetFromQueryAsync("")).ToArray();
         }
