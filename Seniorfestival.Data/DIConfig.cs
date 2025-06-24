@@ -14,6 +14,7 @@ namespace Seniorfestival.Data
             services.AddSingleton(_ => new TableServiceClient(tabelClientConnectionString));
             services.AddSingleton(typeof(ITableRepository<>), typeof(TableRepository<>));
             services.AddSingleton(typeof(IEventRepository), typeof(EventRepository));
+            services.AddSingleton(typeof(ISettingRepository), typeof(SettingRepository));
             services.AddSingleton(typeof(IShopRepository), typeof(ShopRepository));
             services.AddSingleton(typeof(ITextRepository), typeof(TextRepository));
 
