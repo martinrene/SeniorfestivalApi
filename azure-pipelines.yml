@@ -14,7 +14,7 @@ variables:
   functionAppName: 'seniorfestivalapi'
 
   # Agent VM image name
-  vmImageName: 'windows-latest'
+  vmImageName: 'windows-2022'
 
   # Working Directory
   workingDirectory: '$(System.DefaultWorkingDirectory)/Seniorfestival.Api'
