@@ -38,9 +38,9 @@ namespace Seniorfestival.Data.Persistence
             await _tableClient.AddEntityAsync(item);
         }
 
-        public async Task<T> GetAsync(Guid partitionKey, Guid rowKey)
+        public async Task<T> GetAsync(string partitionKey, string rowKey)
         {
-            return await _tableClient.GetEntityAsync<T>(partitionKey.ToString(), rowKey.ToString());
+            return await _tableClient.GetEntityAsync<T>(partitionKey, rowKey);
         }
 
         public async Task<List<T>> GetFromQueryAsync(string filter)

@@ -2,9 +2,10 @@ using Seniorfestival.Data.Models.Base;
 
 namespace Seniorfestival.Data.Models
 {
-    [Table("Actives")]
+    [Table("SettingsSettings")]
     public class Setting : EntityBase
     {
-        public bool Active { get; set; }
+        public string Name { get; set; } = "";
+        public string Value { get; set; } = "";
     }
 }
