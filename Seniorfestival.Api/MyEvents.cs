@@ -60,13 +60,10 @@ public class MyEvents
                 var myEvents = await myEventRepository.ReadAllMyEvents(phoneId);
                 return new OkObjectResult(myEvents);
         }
-
-
-        return new OkObjectResult("Welcome to Azure Functions!");
     }
 
     private class MyEventRequest
     {
-        public string MyEventId { get; set; }
+        public string MyEventId { get; set; } = "";
     }
 }
