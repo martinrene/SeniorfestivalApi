@@ -37,7 +37,7 @@ public class MyEvents
         {
             case "POST":
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-                MyEventRequest? data = JsonSerializer.Deserialize<MyEventRequest>(requestBody);
+                MyEventRequest? data = JsonSerializer.Deserialize<MyEventRequest>(requestBody, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
                 if (data != null && !string.IsNullOrEmpty(data.MyEventId))
                 {

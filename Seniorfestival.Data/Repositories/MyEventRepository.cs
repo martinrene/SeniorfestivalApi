@@ -38,6 +38,10 @@ namespace Seniorfestival.Data.Repositories
         public async Task RemoveFromMyEvents(string phoneId, string eventId)
         {
             MyEvent subscriptionToRemove = await repository.GetAsync(phoneId, eventId);
+            if (subscriptionToRemove != null)
+            {
+                await repository.RemoveAsync(subscriptionToRemove);
+            }
         }
     }
 }
