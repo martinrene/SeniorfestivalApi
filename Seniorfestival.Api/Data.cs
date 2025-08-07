@@ -19,10 +19,11 @@ public class Data
     private static DataObject? cacheValue;
     private static DateTime? cacheExpire;
 
-    public Data(ILogger<Data> logger, IEventRepository eventRepository, ISettingRepository settingRepository, ITextRepository textRepository)
+    public Data(ILogger<Data> logger, IEventRepository eventRepository, IShopRepository shopRepository, ISettingRepository settingRepository, ITextRepository textRepository)
     {
         _logger = logger;
         this.eventRepository = eventRepository;
+        this.shopRepository = shopRepository;
         this.settingRepository = settingRepository;
         this.textRepository = textRepository;
     }
