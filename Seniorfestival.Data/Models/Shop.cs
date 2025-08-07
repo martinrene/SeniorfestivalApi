@@ -10,7 +10,6 @@ namespace Seniorfestival.Data.Models
         public string? PictureUrl { get; set; }
         public bool IsShop { get; set; }
         public string? Links { get; set; }
-        public bool Public { get; set; }
 
         public int Id()
         {
