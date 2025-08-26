@@ -33,7 +33,7 @@ public class Data
     {
         _logger.LogInformation("C# HTTP trigger function processed a request.");
 
-        if (string.IsNullOrEmpty(req.Query["clearcache"]))
+        if (!string.IsNullOrEmpty(req.Query["clearcache"]))
         {
             cacheValue = null;
             cacheExpire = null;
