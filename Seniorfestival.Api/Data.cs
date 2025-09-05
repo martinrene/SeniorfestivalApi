@@ -51,10 +51,34 @@ public class Data
 
                 await Task.WhenAll(eventsReq, shopsReq, settingsReq, textReq);
 
+                var schedules = eventsReq.Result.Where(e => e.PartitionKey == "Program").OrderBy(e =>
+                {
+                    if (String.IsNullOrEmpty(e.Start))
+                    {
+                        return DateTime.MinValue;
+                    }
+
+                    var splt = e.Start.Split(":");
+                    return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
+                });
+
+                var avtivities = eventsReq.Result.Where(e => e.PartitionKey == "Aktivitet").OrderBy(e =>
+                {
+                    if (String.IsNullOrEmpty(e.Start))
+                    {
+                        return DateTime.MinValue;
+                    }
+
+                    var splt = e.Start.Split(":");
+                    return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
+                });
+
+
+
                 DataObject data = new DataObject()
                 {
-                    ScheduleEvents = eventsReq.Result.Where(e => e.PartitionKey == "Program").ToArray(),
-                    ActivityEvents = eventsReq.Result.Where(e => e.PartitionKey == "Aktivitet").ToArray(),
+                    ScheduleEvents = schedules.ToArray(),
+                    ActivityEvents = avtivities.ToArray(),
                     Shops = shopsReq.Result,
                     Settings = settingsReq.Result,
                     Texts = textReq.Result
