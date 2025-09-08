@@ -19,6 +19,8 @@ namespace Seniorfestival.Data
             services.AddSingleton(typeof(ITextRepository), typeof(TextRepository));
             services.AddSingleton(typeof(IMyEventRepository), typeof(MyEventRepository));
             services.AddSingleton(typeof(IGuestRepository), typeof(GuestRepository));
+            services.AddSingleton(typeof(IVotingRepository), typeof(VotingRespository));
+            services.AddSingleton(typeof(IVoteRepository), typeof(VoteRepository));
 
             return services;
         }
