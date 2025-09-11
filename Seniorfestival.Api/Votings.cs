@@ -10,6 +10,8 @@ namespace Seniorfestival.Api;
 
 public class Votings
 {
+    Voting cachedVoting;
+
     private readonly ILogger<Votings> _logger;
     private readonly IVotingRepository votingRepository;
     private readonly IVoteRepository voteRepository;
@@ -41,12 +43,17 @@ public class Votings
 
                 if (!string.IsNullOrEmpty(req.Query["votingId"]))
                 {
+                    if (cachedVoting == null || cachedVoting.VotingId != req.Query["votingId"])
+                    {
+                        cachedVoting = await votingRepository.FetchVoting(req.Query["votingId"]);
+                    }
+
                     var votes = await voteRepository.ReadAllVotesForVoting(req.Query["votingId"]);
 
                     var counts = votes.GroupBy(n => n.Choice)
                             .Select(g => new { Answer = g.Key, Count = g.Count() });
 
-                    return new OkObjectResult(counts);
+                    return new OkObjectResult(new { title = cachedVoting.Description, counts = counts });
                 }
 
                 var allVotings = await votingRepository.ReadActiveVotings();

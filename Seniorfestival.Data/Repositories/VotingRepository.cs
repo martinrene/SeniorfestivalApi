@@ -20,5 +20,10 @@ namespace Seniorfestival.Data.Repositories
         {
             return (await repository.GetFromQueryAsync("Active eq true")).ToArray();
         }
+
+        public async Task<Voting> FetchVoting(string votingId)
+        {
+            return (await repository.GetAsync("Voting", votingId));
+        }
     }
 }
