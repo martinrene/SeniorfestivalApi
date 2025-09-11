@@ -21,5 +21,10 @@ namespace Seniorfestival.Data.Repositories
         {
             return (await repository.GetFromQueryAsync($"RowKey eq '{phoneId}'")).ToArray();
         }
+
+        public async Task<Vote[]> ReadAllVotesForVoting(string votingId)
+        {
+            return (await repository.GetFromQueryAsync($"PartitionKey eq '{votingId}'")).ToArray();
+        }
     }
 }

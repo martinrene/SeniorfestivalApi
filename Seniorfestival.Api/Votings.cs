@@ -38,6 +38,17 @@ public class Votings
 
 
             default:
+
+                if (!string.IsNullOrEmpty(req.Query["votingId"]))
+                {
+                    var votes = await voteRepository.ReadAllVotesForVoting(req.Query["votingId"]);
+
+                    var counts = votes.GroupBy(n => n.Choice)
+                            .Select(g => new { Answer = g.Key, Count = g.Count() });
+
+                    return new OkObjectResult(counts);
+                }
+
                 var allVotings = await votingRepository.ReadActiveVotings();
 
                 if (allVotings.Length == 0)

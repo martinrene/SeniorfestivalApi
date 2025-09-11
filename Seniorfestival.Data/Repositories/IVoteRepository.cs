@@ -6,5 +6,7 @@ namespace Seniorfestival.Data.Repositories
     {
         public Task AddMyVote(Vote vote);
         Task<Vote[]> ReadAllMyVotes(string phoneId);
+
+        Task<Vote[]> ReadAllVotesForVoting(string votingId);
     }
 }
