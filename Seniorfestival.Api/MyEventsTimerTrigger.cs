@@ -31,7 +31,7 @@ public class MyEventsTimerTrigger
             var events = await eventRepository.ReadAllEvents();
             var nowForDaySelect = DateTime.UtcNow.AddHours(-4);
 
-            TimeZoneInfo tst = TimeZoneInfo.FindSystemTimeZoneById("CET");
+            TimeZoneInfo tst = TimeZoneInfo.FindSystemTimeZoneById("Central Europe Standard Time");
             DateTime nowt = DateTime.UtcNow;
 
             DateTime.SpecifyKind(nowt, DateTimeKind.Utc);
