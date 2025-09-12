@@ -79,12 +79,12 @@ public class MyEventsTimerTrigger
 
                 oneSignalRequest.headings = new Headings()
                 {
-                    en = $"{evt.Title} starter lige om lidt"
+                    en = $"{evt.Title} om få minutter"
                 };
 
                 oneSignalRequest.contents = new Contents()
                 {
-                    en = $"Skynd dig til {evt.Location} - det hele begynder kl. {evt.Start}."
+                    en = $"Skynd dig til {evt.Location} - {evt.Title} er klar kl. {evt.Start}. Vi zez"
                 };
 
                 oneSignalRequest.data = new Data()
@@ -96,7 +96,6 @@ public class MyEventsTimerTrigger
                 oneSignalRequest.include_aliases = new IncludeAliases()
                 {
                     external_id = myEventsForEvent.Select(e => e.PartitionKey).ToArray()
-                    //external_id = myEventsForEvent.Where(p => p.PartitionKey == "85050705-F683-49AE-BF7D-73CF9F4F60DE").Select(e => e.PartitionKey).ToArray()
                 };
 
                 if (oneSignalRequest.include_aliases.external_id.Count() > 0)
