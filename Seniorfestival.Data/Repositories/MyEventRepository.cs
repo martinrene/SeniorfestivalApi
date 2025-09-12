@@ -28,11 +28,9 @@ namespace Seniorfestival.Data.Repositories
             return events;
         }
 
-        public async Task<MyEvent[]> ReadMyEventsFromListOfEventIds(string eventId)
+        public async Task<MyEvent[]> MyEventsForEventId(string eventId)
         {
-            MyEvent[] events = (await repository.GetFromQueryAsync($"RowKey eq '{eventId}'")).ToArray();
-
-            throw new NotImplementedException();
+            return (await repository.GetFromQueryAsync($"RowKey eq '{eventId}'")).ToArray();
         }
 
         public async Task RemoveFromMyEvents(string phoneId, string eventId)

@@ -9,6 +9,6 @@ namespace Seniorfestival.Data.Repositories
 
         Task RemoveFromMyEvents(string phoneId, string eventId);
 
-        Task<MyEvent[]> ReadMyEventsFromListOfEventIds(string eventId);
+        Task<MyEvent[]> MyEventsForEventId(string eventId);
     }
 }
