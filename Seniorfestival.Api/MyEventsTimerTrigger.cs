@@ -1,4 +1,5 @@
 using System;
+using System.Linq.Expressions;
 using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.Azure.Functions.Worker;
@@ -25,87 +26,97 @@ public class MyEventsTimerTrigger
     [Function("MyEventsTimerTrigger")]
     public async Task Run([TimerTrigger("0 1,11,21,31,41,51 * * * *")] TimerInfo myTimer)
     {
-        var events = await eventRepository.ReadAllEvents();
-        var nowForDaySelect = DateTime.UtcNow.AddHours(-4);
-
-        TimeZoneInfo tst = TimeZoneInfo.FindSystemTimeZoneById("CET");
-        DateTime nowt = DateTime.UtcNow;
-
-        DateTime.SpecifyKind(nowt, DateTimeKind.Utc);
-
-        DateTime now = TimeZoneInfo.ConvertTime(nowt, TimeZoneInfo.Utc, tst);
-        DateTime next = TimeZoneInfo.ConvertTime(nowt.AddMinutes(10), TimeZoneInfo.Utc, tst);
-
-        var danishDay = "";
-        var dayNo = 0;
-
-        switch (nowForDaySelect.DayOfWeek)
+        try
         {
-            case DayOfWeek.Friday:
-                danishDay = "fredag";
-                dayNo = 12;
-                break;
+            var events = await eventRepository.ReadAllEvents();
+            var nowForDaySelect = DateTime.UtcNow.AddHours(-4);
 
-            case DayOfWeek.Saturday:
-                danishDay = "lordag";
-                dayNo = 13;
-                break;
+            TimeZoneInfo tst = TimeZoneInfo.FindSystemTimeZoneById("CET");
+            DateTime nowt = DateTime.UtcNow;
 
-            case DayOfWeek.Sunday:
-                danishDay = "sondag";
-                dayNo = 14;
-                break;
+            DateTime.SpecifyKind(nowt, DateTimeKind.Utc);
 
-            default:
-                return;
+            DateTime now = TimeZoneInfo.ConvertTime(nowt, TimeZoneInfo.Utc, tst);
+            DateTime next = TimeZoneInfo.ConvertTime(nowt.AddMinutes(10), TimeZoneInfo.Utc, tst);
+
+            var danishDay = "";
+            var dayNo = 0;
+
+            switch (nowForDaySelect.DayOfWeek)
+            {
+                case DayOfWeek.Friday:
+                    danishDay = "fredag";
+                    dayNo = 12;
+                    break;
+
+                case DayOfWeek.Saturday:
+                    danishDay = "lordag";
+                    dayNo = 13;
+                    break;
+
+                case DayOfWeek.Sunday:
+                    danishDay = "sondag";
+                    dayNo = 14;
+                    break;
+
+                default:
+                    return;
+            }
+
+            var eventsNow = events.Where(e => e.Day == danishDay).Where(e =>
+            {
+                var splt = e.Start?.Split(":");
+                var hour = int.Parse(splt[0]);
+                var eventDate = new DateTime(now.Year, now.Month, hour < 4 ? dayNo + 1 : dayNo, hour, int.Parse(splt[1]), 0);
+                return now < eventDate && eventDate < next;
+            }).Select(e => e);
+
+            foreach (var evt in eventsNow)
+            {
+                var myEventsForEvent = await myEventRepository.MyEventsForEventId(evt.RowKey);
+
+                var oneSignalRequest = new OneSignalRequest();
+
+                oneSignalRequest.headings = new Headings()
+                {
+                    en = $"{evt.Title} starter lige om lidt"
+                };
+
+                oneSignalRequest.contents = new Contents()
+                {
+                    en = $"Skynd dig til {evt.Location} - det hele begynder kl. {evt.Start}."
+                };
+
+                oneSignalRequest.data = new Data()
+                {
+                    eventDay = danishDay,
+                    eventId = evt.RowKey
+                };
+
+                oneSignalRequest.include_aliases = new IncludeAliases()
+                {
+                    external_id = myEventsForEvent.Select(e => e.PartitionKey).ToArray()
+                    //external_id = myEventsForEvent.Where(p => p.PartitionKey == "85050705-F683-49AE-BF7D-73CF9F4F60DE").Select(e => e.PartitionKey).ToArray()
+                };
+
+                if (oneSignalRequest.include_aliases.external_id.Count() > 0)
+                {
+
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(oneSignalRequest);
+                    var data = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    using var client = new HttpClient();
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Key", key);
+
+                    var response = await client.PostAsync(url, data);
+                }
+
+            }
         }
-
-        var eventsNow = events.Where(e => e.Day == danishDay).Where(e =>
+        catch (Exception ex)
         {
-            var splt = e.Start?.Split(":");
-            var hour = int.Parse(splt[0]);
-            var eventDate = new DateTime(now.Year, now.Month, hour < 4 ? dayNo + 1 : dayNo, hour, int.Parse(splt[1]), 0);
-            return now < eventDate && eventDate < next;
-        }).Select(e => e);
-
-        foreach (var evt in eventsNow)
-        {
-            var myEventsForEvent = await myEventRepository.MyEventsForEventId(evt.RowKey);
-
-            var oneSignalRequest = new OneSignalRequest();
-
-            oneSignalRequest.headings = new Headings()
             {
-                en = $"{evt.Title} starter lige om lidt"
-            };
-
-            oneSignalRequest.contents = new Contents()
-            {
-                en = $"Skynd dig til {evt.Location} - det hele begynder kl. {evt.Start}."
-            };
-
-            oneSignalRequest.data = new Data()
-            {
-                eventDay = danishDay,
-                eventId = evt.RowKey
-            };
-
-            oneSignalRequest.include_aliases = new IncludeAliases()
-            {
-                external_id = myEventsForEvent.Select(e => e.PartitionKey).ToArray()
-                //external_id = myEventsForEvent.Where(p => p.PartitionKey == "85050705-F683-49AE-BF7D-73CF9F4F60DE").Select(e => e.PartitionKey).ToArray()
-            };
-
-            if (oneSignalRequest.include_aliases.external_id.Count() > 0)
-            {
-
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(oneSignalRequest);
-                var data = new StringContent(json, Encoding.UTF8, "application/json");
-
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Key", key);
-
-                var response = await client.PostAsync(url, data);
+                _logger.LogError(ex, ex.Message, []);
             }
         }
     }
