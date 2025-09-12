@@ -23,7 +23,7 @@ public class MyEventsTimerTrigger
     }
 
     [Function("MyEventsTimerTrigger")]
-    public async Task Run([TimerTrigger("1,11,21,31,41,51 * * * *")] TimerInfo myTimer)
+    public async Task Run([TimerTrigger("0 1,11,21,31,41,51 * * * *")] TimerInfo myTimer)
     {
         var events = await eventRepository.ReadAllEvents();
         var nowForDaySelect = DateTime.UtcNow.AddHours(-4);
