@@ -40,59 +40,59 @@ public class Data
         }
         ;
 
-        if (cacheValue == null || cacheExpire == null || new DateTime() > cacheExpire)
+        //if (cacheValue == null || cacheExpire == null || new DateTime() > cacheExpire)
+        //{
+        try
         {
-            try
+            var eventsReq = eventRepository.ReadAllEvents();
+            var shopsReq = shopRepository.ReadAllShops();
+            var settingsReq = settingRepository.ReadAllSettings();
+            var textReq = textRepository.ReadAllTexts();
+
+            await Task.WhenAll(eventsReq, shopsReq, settingsReq, textReq);
+
+            var schedules = eventsReq.Result.Where(e => e.PartitionKey == "Program").OrderBy(e =>
             {
-                var eventsReq = eventRepository.ReadAllEvents();
-                var shopsReq = shopRepository.ReadAllShops();
-                var settingsReq = settingRepository.ReadAllSettings();
-                var textReq = textRepository.ReadAllTexts();
-
-                await Task.WhenAll(eventsReq, shopsReq, settingsReq, textReq);
-
-                var schedules = eventsReq.Result.Where(e => e.PartitionKey == "Program").OrderBy(e =>
+                if (String.IsNullOrEmpty(e.Start))
                 {
-                    if (String.IsNullOrEmpty(e.Start))
-                    {
-                        return DateTime.MinValue;
-                    }
+                    return DateTime.MinValue;
+                }
 
-                    var splt = e.Start.Split(":");
-                    return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
-                });
+                var splt = e.Start.Split(":");
+                return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
+            });
 
-                var avtivities = eventsReq.Result.Where(e => e.PartitionKey == "Aktivitet").OrderBy(e =>
-                {
-                    if (String.IsNullOrEmpty(e.Start))
-                    {
-                        return DateTime.MinValue;
-                    }
-
-                    var splt = e.Start.Split(":");
-                    return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
-                });
-
-
-
-                DataObject data = new DataObject()
-                {
-                    ScheduleEvents = schedules.ToArray(),
-                    ActivityEvents = avtivities.ToArray(),
-                    Shops = shopsReq.Result,
-                    Settings = settingsReq.Result,
-                    Texts = textReq.Result
-                };
-
-                cacheValue = data;
-                cacheExpire = new DateTime().AddMinutes(10);
-            }
-            catch (Exception ex)
+            var avtivities = eventsReq.Result.Where(e => e.PartitionKey == "Aktivitet").OrderBy(e =>
             {
-                _logger.LogError(ex.Message);
-                return new BadRequestResult();
-            }
+                if (String.IsNullOrEmpty(e.Start))
+                {
+                    return DateTime.MinValue;
+                }
+
+                var splt = e.Start.Split(":");
+                return new DateTime(2025, 1, 1, Int32.Parse(splt[0]), Int32.Parse(splt[1]), 0);
+            });
+
+
+
+            DataObject data = new DataObject()
+            {
+                ScheduleEvents = schedules.ToArray(),
+                ActivityEvents = avtivities.ToArray(),
+                Shops = shopsReq.Result,
+                Settings = settingsReq.Result,
+                Texts = textReq.Result
+            };
+
+            cacheValue = data;
+            cacheExpire = new DateTime().AddMinutes(2);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex.Message);
+            return new BadRequestResult();
+        }
+        //}
         return new OkObjectResult(cacheValue);
     }
 
