@@ -16,5 +16,20 @@ namespace Seniorfestival.Data.Repositories
         {
             return (await repository.GetFromQueryAsync("")).ToArray();
         }
+
+        public async Task<Event[]> ReadEventsByPartition(string partitionKey)
+        {
+            return (await repository.GetFromQueryAsync($"PartitionKey eq '{partitionKey}'")).ToArray();
+        }
+
+        public async Task UpsertEvent(Event evt)
+        {
+            await repository.UpsertAsync(evt);
+        }
+
+        public async Task DeleteEvent(Event evt)
+        {
+            await repository.RemoveAsync(evt);
+        }
     }
 }

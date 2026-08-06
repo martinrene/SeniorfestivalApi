@@ -10,6 +10,7 @@ namespace Seniorfestival.Data.Persistence
     {
         public Task AddAsync(T item);
         public Task UpdateAsync(T item);
+        public Task UpsertAsync(T item);
         public Task RemoveAsync(T item);
         public Task<T> GetAsync(string partitionKey, string rowKey);
         public Task<List<T>> GetFromQueryAsync(string filter);

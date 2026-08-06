@@ -29,6 +29,7 @@ namespace Seniorfestival.Data.Persistence
             }
 
             _tableClient = tableServiceClient.GetTableClient(tableName);
+            _tableClient.CreateIfNotExists();
         }
 
         public async Task AddAsync(T item)
@@ -69,6 +70,11 @@ namespace Seniorfestival.Data.Persistence
             //var entity = item.ValidateTableStorageEntity();
 
             await _tableClient.UpdateEntityAsync(item, Azure.ETag.All, TableUpdateMode.Replace);
+        }
+
+        public async Task UpsertAsync(T item)
+        {
+            await _tableClient.UpsertEntityAsync(item, TableUpdateMode.Replace);
         }
 
         public async Task RemoveAsync(T item)
