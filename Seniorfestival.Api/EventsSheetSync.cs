@@ -88,8 +88,8 @@ public class EventsSheetSync
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     Day = GetCell(row, 0),
-                    Start = GetCell(row, 1),
-                    End = GetCell(row, 2),
+                    Start = NormalizeTime(GetCell(row, 1)),
+                    End = NormalizeTime(GetCell(row, 2)),
                     Title = GetCell(row, 3),
                     Description = GetCell(row, 4),
                     Location = GetCell(row, 5),
@@ -145,5 +145,10 @@ public class EventsSheetSync
     private static string GetCell(IList<object> row, int index)
     {
         return index < row.Count && row[index] != null ? row[index].ToString() ?? "" : "";
+    }
+
+    private static string NormalizeTime(string value)
+    {
+        return value.Replace('.', ':');
     }
 }
