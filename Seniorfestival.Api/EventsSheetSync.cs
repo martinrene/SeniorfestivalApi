@@ -12,7 +12,11 @@ namespace Seniorfestival.Api;
 
 public class EventsSheetSync
 {
-    private const string SheetRange = "Til app!A2:J";
+    private static readonly Dictionary<string, string> SheetRangeByPartitionKey = new()
+    {
+        ["Program"] = "Til app!A2:J",
+        ["Aktivitet"] = "Aktiviteter til app!A2:J"
+    };
 
     private readonly ILogger<EventsSheetSync> _logger;
     private readonly IEventRepository eventRepository;
@@ -69,7 +73,7 @@ public class EventsSheetSync
                 ApplicationName = "SeniorfestivalApi"
             });
 
-            var valueRange = await sheetsService.Spreadsheets.Values.Get(spreadsheetId, SheetRange).ExecuteAsync();
+            var valueRange = await sheetsService.Spreadsheets.Values.Get(spreadsheetId, SheetRangeByPartitionKey[partitionKey]).ExecuteAsync();
             var rows = valueRange.Values ?? [];
 
             var sheetEvents = new List<Event>();
