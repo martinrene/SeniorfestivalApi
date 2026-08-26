@@ -12,12 +12,6 @@ namespace Seniorfestival.Api;
 
 public class EventsSheetSync
 {
-    private static readonly Dictionary<string, string> SheetRangeByPartitionKey = new()
-    {
-        ["Program"] = "Til app!A2:J",
-        ["Aktivitet"] = "Aktiviteter til app!A2:J"
-    };
-
     private readonly ILogger<EventsSheetSync> _logger;
     private readonly IEventRepository eventRepository;
 
@@ -52,6 +46,18 @@ public class EventsSheetSync
             return new BadRequestObjectResult($"No spreadsheet configured for type '{partitionKey}'. Set app setting 'googleSheetsSpreadsheetId_{partitionKey}'.");
         }
 
+        string? tabName = Environment.GetEnvironmentVariable($"googleSheetsTabName_{partitionKey}");
+        if (string.IsNullOrEmpty(tabName))
+        {
+            return new BadRequestObjectResult($"No sheet tab configured for type '{partitionKey}'. Set app setting 'googleSheetsTabName_{partitionKey}'.");
+        }
+
+        string? cellRange = Environment.GetEnvironmentVariable("googleSheetsCellRange");
+        if (string.IsNullOrEmpty(cellRange))
+        {
+            return new BadRequestObjectResult("App setting 'googleSheetsCellRange' is not configured.");
+        }
+
         string? credentialsSetting = Environment.GetEnvironmentVariable("googleServiceAccountCredentials");
         if (string.IsNullOrEmpty(credentialsSetting))
         {
@@ -73,7 +79,7 @@ public class EventsSheetSync
                 ApplicationName = "SeniorfestivalApi"
             });
 
-            var valueRange = await sheetsService.Spreadsheets.Values.Get(spreadsheetId, SheetRangeByPartitionKey[partitionKey]).ExecuteAsync();
+            var valueRange = await sheetsService.Spreadsheets.Values.Get(spreadsheetId, $"{tabName}!{cellRange}").ExecuteAsync();
             var rows = valueRange.Values ?? [];
 
             var sheetEvents = new List<Event>();
