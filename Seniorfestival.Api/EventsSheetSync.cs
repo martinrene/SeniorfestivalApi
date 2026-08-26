@@ -97,7 +97,7 @@ public class EventsSheetSync
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    Day = GetCell(row, 0),
+                    Day = GetCell(row, 0).ToLowerInvariant(),
                     Start = NormalizeTime(GetCell(row, 1)),
                     End = NormalizeTime(GetCell(row, 2)),
                     Title = GetCell(row, 3),
