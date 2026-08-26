@@ -14,7 +14,7 @@ namespace Seniorfestival.Data.Repositories
 
         public async Task<Event[]> ReadAllEvents()
         {
-            return (await repository.GetFromQueryAsync("")).ToArray();
+            return (await repository.GetFromQueryAsync("")).Where(e => e.Public).ToArray();
         }
 
         public async Task<Event[]> ReadEventsByPartition(string partitionKey)
