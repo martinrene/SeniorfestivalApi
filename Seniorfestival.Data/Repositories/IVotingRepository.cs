@@ -6,6 +6,14 @@ namespace Seniorfestival.Data.Repositories
     {
         Task<Voting[]> ReadActiveVotings();
 
+        Task<Voting[]> ReadAllVotings();
+
         Task<Voting> FetchVoting(string votingId);
+
+        Task<Voting?> FindVoting(string votingId);
+
+        Task CreateVoting(Voting voting);
+
+        Task SaveVoting(Voting voting);
     }
 }
