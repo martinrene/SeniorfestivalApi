@@ -16,5 +16,15 @@ namespace Seniorfestival.Data.Repositories
         {
             return (await repository.GetFromQueryAsync("")).ToArray();
         }
+
+        public async Task UpsertGuest(Guest guest)
+        {
+            await repository.UpsertAsync(guest);
+        }
+
+        public async Task DeleteGuest(Guest guest)
+        {
+            await repository.RemoveAsync(guest);
+        }
     }
 }
