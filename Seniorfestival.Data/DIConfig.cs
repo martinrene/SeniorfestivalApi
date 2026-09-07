@@ -22,6 +22,7 @@ namespace Seniorfestival.Data
             services.AddSingleton(typeof(IVotingRepository), typeof(VotingRespository));
             services.AddSingleton(typeof(IVoteRepository), typeof(VoteRepository));
             services.AddSingleton(typeof(IQueueNumberRepository), typeof(QueueNumberRepository));
+            services.AddSingleton(typeof(IGameScoreRepository), typeof(GameScoreRepository));
 
             return services;
         }
