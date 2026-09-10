@@ -73,11 +73,31 @@ public class EventsAdmin
         // Only an activity with a QR code can be queued for, so only those need a count.
         var queueLengths = await ReadQueueLengths(activities);
 
+        // A shared code is deliberate, so the list has to be able to say so rather than
+        // leaving it looking like the same code was pasted in twice by mistake.
+        var sharingCode = activities
+            .Where(e => !string.IsNullOrWhiteSpace(e.QrCode))
+            .GroupBy(e => e.QrCode!)
+            .ToDictionary(g => g.Key, g => g.ToArray());
+
         // An activity with no QR code reports a null length rather than 0: there is no
         // queue to be empty.
         return new OkObjectResult(activities
-            .Select(e => ToDto(e, queueLengths.TryGetValue(e.RowKey, out var length) ? length : null)));
+            .Select(e => ToDto(
+                e,
+                queueLengths.TryGetValue(e.RowKey, out var length) ? length : null,
+                OtherDays(sharingCode.GetValueOrDefault(e.QrCode ?? "", []), e))));
     }
+
+    /// <summary>
+    /// The days, in festival order, that other rows sharing this row's QR code run on.
+    /// </summary>
+    private static string[] OtherDays(Event[] sharing, Event evt) => sharing
+        .Where(e => e.RowKey != evt.RowKey)
+        .Select(e => FestivalDay.Normalize(e.Day))
+        .Distinct()
+        .OrderBy(day => FestivalDay.Rank(day))
+        .ToArray();
 
     private async Task<Dictionary<string, int>> ReadQueueLengths(Event[] activities)
     {
@@ -124,15 +144,23 @@ public class EventsAdmin
             return Error(invalidOpeningHours);
         }
 
-        // Two activities sharing a QR code would send guests into whichever queue the
-        // table happened to return first, so the code has to stay unique.
+        // Sharing a code across days is the point: an activity that runs Friday to Sunday
+        // is one printed sign and one row per day, each with its own queue, and the guest's
+        // scan resolves to the row for the day they are standing there on. Two rows on the
+        // *same* day cannot be told apart that way, so that stays an error.
+        Event[] sharing = [];
+
         if (qrCode.Length > 0)
         {
-            var owner = await eventRepository.FindByQrCode(qrCode);
+            sharing = await eventRepository.ReadEventsByQrCode(qrCode);
+            string day = FestivalDay.Normalize(evt.Day);
 
-            if (owner != null && owner.RowKey != evt.RowKey)
+            var clash = sharing.FirstOrDefault(e =>
+                e.RowKey != evt.RowKey && FestivalDay.Normalize(e.Day) == day);
+
+            if (clash != null)
             {
-                return Error($"QR-koden bruges allerede af '{owner.Title}'.");
+                return Error($"QR-koden bruges allerede af '{clash.Title}' samme dag.");
             }
         }
 
@@ -149,7 +177,9 @@ public class EventsAdmin
             ? (int?)null
             : (await queueNumberRepository.ReadActiveQueueForEvent(evt.RowKey)).Length;
 
-        return new OkObjectResult(ToDto(evt, queueLength));
+        // Only this row was written, so the rows read before the save still describe the
+        // other days correctly.
+        return new OkObjectResult(ToDto(evt, queueLength, OtherDays(sharing, evt)));
     }
 
     /// <summary>
@@ -203,7 +233,7 @@ public class EventsAdmin
         }
     }
 
-    private static object ToDto(Event evt, int? queueLength) => new
+    private static object ToDto(Event evt, int? queueLength, string[] sharedDays) => new
     {
         eventId = evt.RowKey,
         title = evt.Title,
@@ -212,6 +242,8 @@ public class EventsAdmin
         end = evt.End,
         location = evt.Location,
         qrCode = evt.QrCode,
+        // Other days running the same printed code, so the UI can show it is on purpose.
+        sharedDays,
         minutesPerPerson = evt.MinutesPerPerson,
         openingHours = evt.OpeningHours,
         // What the queue actually estimates with right now: measured service times win over

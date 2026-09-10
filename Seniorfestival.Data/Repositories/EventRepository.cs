@@ -28,10 +28,40 @@ namespace Seniorfestival.Data.Repositories
             return matches.FirstOrDefault();
         }
 
-        public async Task<Event?> FindByQrCode(string qrCode)
+        public async Task<Event[]> ReadEventsByQrCode(string qrCode)
         {
-            var matches = await repository.GetFromQueryAsync($"QrCode eq '{qrCode}'");
-            return matches.FirstOrDefault();
+            return (await repository.GetFromQueryAsync($"QrCode eq '{qrCode}'")).ToArray();
+        }
+
+        public async Task<Event?> FindByQrCode(string qrCode, string day)
+        {
+            var matches = await ReadEventsByQrCode(qrCode);
+
+            // The common case: the code belongs to a single-day activity, and the day the
+            // guest is standing there on does not come into it.
+            if (matches.Length <= 1)
+            {
+                return matches.FirstOrDefault();
+            }
+
+            string today = FestivalDay.Normalize(day);
+            var todaysEvent = matches.FirstOrDefault(e => FestivalDay.Normalize(e.Day) == today);
+
+            if (todaysEvent != null)
+            {
+                return todaysEvent;
+            }
+
+            // Nothing runs today - the festival has not started, or this activity is not on
+            // today. Hand back the next day it does run rather than nothing at all, so
+            // scanning a sign still works while the festival is being set up.
+            var byDay = matches
+                .OrderBy(e => FestivalDay.Rank(e.Day))
+                .ThenBy(e => e.RowKey)
+                .ToArray();
+
+            return byDay.FirstOrDefault(e => FestivalDay.Rank(e.Day) >= FestivalDay.Rank(day))
+                ?? byDay[0];
         }
 
         public async Task RecordServiceCompletion(string eventId)

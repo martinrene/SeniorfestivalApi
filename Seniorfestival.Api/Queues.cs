@@ -36,7 +36,9 @@ public class Queues
         }
 
         TimeZoneInfo festivalTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central Europe Standard Time");
-        TimeOnly nowLocal = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, festivalTimeZone));
+        DateTime nowFestival = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, festivalTimeZone);
+        TimeOnly nowLocal = TimeOnly.FromDateTime(nowFestival);
+        string today = FestivalDay.FromDayOfWeek(nowFestival.DayOfWeek);
 
         switch (req.Method)
         {
@@ -49,7 +51,9 @@ public class Queues
                     return new BadRequestResult();
                 }
 
-                Event? evt = await eventRepository.FindByQrCode(data.QrCode);
+                // One sign can cover an activity that runs several days, and each day is its
+                // own row with its own queue - so which row this is depends on the date.
+                Event? evt = await eventRepository.FindByQrCode(data.QrCode, today);
                 if (evt == null)
                 {
                     return new NotFoundResult();
