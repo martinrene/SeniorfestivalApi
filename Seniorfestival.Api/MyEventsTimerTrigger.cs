@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using Seniorfestival.Api;
 using Seniorfestival.Data.Repositories;
 
 namespace Seniorfestival.System;
@@ -13,8 +14,6 @@ public class MyEventsTimerTrigger
     private readonly ILogger _logger;
     private readonly IEventRepository eventRepository;
     private readonly IMyEventRepository myEventRepository;
-    private readonly string url = "https://api.onesignal.com/notifications";
-    private readonly string key = "os_v2_app_m4rhcerxongu3fxtgvam7fzpi7lgya4fmbku5oemy3mppo42ajozjdbfj2l7676hx5gnl54xxbhbzwing7gynuvgqpd2p4zdne42s2i";
 
     public MyEventsTimerTrigger(ILoggerFactory loggerFactory, IEventRepository eventRepository, IMyEventRepository myEventRepository)
     {
@@ -28,6 +27,15 @@ public class MyEventsTimerTrigger
     {
         try
         {
+            // Credentials come from app settings now. Without them there is nothing to
+            // post to, so say so once rather than failing per notification.
+            if (!OneSignalConfig.IsConfigured)
+            {
+                _logger.LogError(
+                    "oneSignalAppId or oneSignalApiKey is not configured - skipping event reminders.");
+                return;
+            }
+
             var events = await eventRepository.ReadAllEvents();
             var nowForDaySelect = DateTime.UtcNow.AddHours(-4);
 
@@ -77,6 +85,8 @@ public class MyEventsTimerTrigger
 
                 var oneSignalRequest = new OneSignalRequest();
 
+                oneSignalRequest.app_id = OneSignalConfig.AppId!;
+
                 oneSignalRequest.headings = new Headings()
                 {
                     en = $"{evt.Title} om få minutter"
@@ -105,9 +115,10 @@ public class MyEventsTimerTrigger
                     var data = new StringContent(json, Encoding.UTF8, "application/json");
 
                     using var client = new HttpClient();
-                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Key", key);
+                    client.DefaultRequestHeaders.Authorization =
+                        new AuthenticationHeaderValue("Key", OneSignalConfig.ApiKey);
 
-                    var response = await client.PostAsync(url, data);
+                    var response = await client.PostAsync(OneSignalConfig.Url, data);
                 }
 
             }
@@ -124,7 +135,7 @@ public class MyEventsTimerTrigger
     private class OneSignalRequest
     {
         public string target_channel { get; set; } = "push";
-        public string app_id { get; set; } = "67227112-3773-4d4d-96f3-3540cf972f47";
+        public string app_id { get; set; } = "";
 
         public IncludeAliases? include_aliases { get; set; }
 

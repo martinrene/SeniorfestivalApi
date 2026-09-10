@@ -20,13 +20,8 @@ namespace Seniorfestival.Api;
 /// </summary>
 public class PushAdmin
 {
-    private const string OneSignalUrl = "https://api.onesignal.com/notifications";
-
     private const int MaxHeadingLength = 80;
     private const int MaxMessageLength = 240;
-
-    /// <summary>OneSignal's default segment of everyone who accepted notifications.</summary>
-    private const string DefaultSegment = "Subscribed Users";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -65,13 +60,7 @@ public class PushAdmin
             return unauthorized;
         }
 
-        string? appId = Environment.GetEnvironmentVariable("oneSignalAppId");
-        string? apiKey = Environment.GetEnvironmentVariable("oneSignalApiKey");
-        string segment = Environment.GetEnvironmentVariable("oneSignalSegment")?.Trim() is { Length: > 0 } configured
-            ? configured
-            : DefaultSegment;
-
-        bool configuredForSending = !string.IsNullOrWhiteSpace(appId) && !string.IsNullOrWhiteSpace(apiKey);
+        string segment = OneSignalConfig.Segment;
 
         // The page asks first, so it can say the send button will not work before someone
         // has typed out a message.
@@ -79,13 +68,13 @@ public class PushAdmin
         {
             return new OkObjectResult(new
             {
-                configured = configuredForSending,
+                configured = OneSignalConfig.IsConfigured,
                 segment,
                 targets = Targets.Keys
             });
         }
 
-        if (!configuredForSending)
+        if (!OneSignalConfig.IsConfigured)
         {
             _logger.LogError("oneSignalAppId or oneSignalApiKey is not configured - cannot send.");
 
@@ -133,7 +122,7 @@ public class PushAdmin
 
         var payload = new Dictionary<string, object>
         {
-            ["app_id"] = appId!,
+            ["app_id"] = OneSignalConfig.AppId!,
             ["target_channel"] = "push",
             ["included_segments"] = new[] { segment },
             ["headings"] = new Dictionary<string, string> { ["en"] = heading },
@@ -147,7 +136,7 @@ public class PushAdmin
             payload["data"] = data;
         }
 
-        return await Send(payload, apiKey!, heading, target, segment);
+        return await Send(payload, OneSignalConfig.ApiKey!, heading, target, segment);
     }
 
     private async Task<IActionResult> Send(
@@ -156,7 +145,7 @@ public class PushAdmin
         using var content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
 
-        using var oneSignalRequest = new HttpRequestMessage(HttpMethod.Post, OneSignalUrl) { Content = content };
+        using var oneSignalRequest = new HttpRequestMessage(HttpMethod.Post, OneSignalConfig.Url) { Content = content };
         oneSignalRequest.Headers.Authorization = new AuthenticationHeaderValue("Key", apiKey);
 
         HttpResponseMessage response;
