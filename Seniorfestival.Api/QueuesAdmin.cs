@@ -42,6 +42,12 @@ public class QueuesAdmin
     [Function("QueuesAdmin")]
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post")] HttpRequest req)
     {
+        var unauthorized = AdminAuth.Check(req, _logger, AdminArea.Activities);
+        if (unauthorized != null)
+        {
+            return unauthorized;
+        }
+
         string? eventId = req.Query["eventId"];
 
         if (string.IsNullOrEmpty(eventId))

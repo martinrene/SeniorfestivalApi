@@ -35,6 +35,12 @@ public class VotingsAdmin
     [Function("VotingsAdmin")]
     public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Function, "get", "post", "put")] HttpRequest req)
     {
+        var unauthorized = AdminAuth.Check(req, _logger, AdminArea.Votings);
+        if (unauthorized != null)
+        {
+            return unauthorized;
+        }
+
         string? votingId = req.Query["votingId"];
 
         switch (req.Method)
