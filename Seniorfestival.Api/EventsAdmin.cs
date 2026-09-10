@@ -59,12 +59,16 @@ public class EventsAdmin
     }
 
     /// <summary>
-    /// Every activity, including the ones the sheet marks as not public - the admin needs to
-    /// see the row it is about to give a QR code, whether or not the app shows it yet.
+    /// The activities worth setting up a queue for. Untitled rows and rows the sheet has
+    /// not marked public are left out: an untitled row is a half-finished sheet line, and
+    /// a non-public one is not shown in the app, so nobody can reach its queue.
+    /// The admin site groups and sorts the result, so no order is imposed here.
     /// </summary>
     private async Task<IActionResult> List()
     {
-        var activities = await eventRepository.ReadEventsByPartition(ActivityPartitionKey);
+        var activities = (await eventRepository.ReadEventsByPartition(ActivityPartitionKey))
+            .Where(e => e.Public && !string.IsNullOrWhiteSpace(e.Title))
+            .ToArray();
 
         // Only an activity with a QR code can be queued for, so only those need a count.
         var queueLengths = await ReadQueueLengths(activities);
@@ -72,7 +76,6 @@ public class EventsAdmin
         // An activity with no QR code reports a null length rather than 0: there is no
         // queue to be empty.
         return new OkObjectResult(activities
-            .OrderBy(e => e.Title, StringComparer.CurrentCultureIgnoreCase)
             .Select(e => ToDto(e, queueLengths.TryGetValue(e.RowKey, out var length) ? length : null)));
     }
 
@@ -208,7 +211,6 @@ public class EventsAdmin
         start = evt.Start,
         end = evt.End,
         location = evt.Location,
-        isPublic = evt.Public,
         qrCode = evt.QrCode,
         minutesPerPerson = evt.MinutesPerPerson,
         openingHours = evt.OpeningHours,
