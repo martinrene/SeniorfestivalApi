@@ -82,6 +82,11 @@ public class EventsSheetSync
             var valueRange = await sheetsService.Spreadsheets.Values.Get(spreadsheetId, $"{tabName}!{cellRange}").ExecuteAsync();
             var rows = valueRange.Values ?? [];
 
+            // Read the table before writing anything: an upsert replaces the whole row, so
+            // every field the sheet has no column for has to be carried over explicitly.
+            var existingEvents = await eventRepository.ReadEventsByPartition(partitionKey);
+            var storedByRowKey = existingEvents.ToDictionary(e => e.RowKey);
+
             var sheetEvents = new List<Event>();
             foreach (var row in rows)
             {
@@ -93,7 +98,7 @@ public class EventsSheetSync
 
                 bool.TryParse(GetCell(row, 8), out bool isPublic);
 
-                sheetEvents.Add(new Event
+                var sheetEvent = new Event
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
@@ -106,7 +111,22 @@ public class EventsSheetSync
                     PictureUrl = GetCell(row, 6),
                     Links = GetCell(row, 7),
                     Public = isPublic
-                });
+                };
+
+                // The queue fields live outside the sheet: QrCode, MinutesPerPerson and
+                // OpeningHours are edited on the admin site, and the service history is
+                // written by the queue itself. Dropping them here would silently reset
+                // every activity's queue setup on the next sync.
+                if (storedByRowKey.TryGetValue(rowKey, out var stored))
+                {
+                    sheetEvent.QrCode = stored.QrCode;
+                    sheetEvent.MinutesPerPerson = stored.MinutesPerPerson;
+                    sheetEvent.OpeningHours = stored.OpeningHours;
+                    sheetEvent.LastServedAt = stored.LastServedAt;
+                    sheetEvent.RecentServiceMinutes = stored.RecentServiceMinutes;
+                }
+
+                sheetEvents.Add(sheetEvent);
             }
 
             if (sheetEvents.Count == 0)
@@ -128,7 +148,6 @@ public class EventsSheetSync
             }
 
             var sheetRowKeys = sheetEvents.Select(e => e.RowKey).ToHashSet();
-            var existingEvents = await eventRepository.ReadEventsByPartition(partitionKey);
             var eventsToDelete = existingEvents.Where(e => !sheetRowKeys.Contains(e.RowKey));
 
             int deletedCount = 0;
