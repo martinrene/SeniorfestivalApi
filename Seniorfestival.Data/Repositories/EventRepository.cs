@@ -33,36 +33,71 @@ namespace Seniorfestival.Data.Repositories
             return (await repository.GetFromQueryAsync($"QrCode eq '{qrCode}'")).ToArray();
         }
 
-        public async Task<Event?> FindByQrCode(string qrCode, string day)
+        public async Task<Event[]> FindSessionsByQrCode(string qrCode, DateTime nowFestival)
         {
             var matches = await ReadEventsByQrCode(qrCode);
 
-            // The common case: the code belongs to a single-day activity, and the day the
-            // guest is standing there on does not come into it.
-            if (matches.Length <= 1)
+            if (matches.Length == 0)
             {
-                return matches.FirstOrDefault();
+                return [];
             }
 
-            string today = FestivalDay.Normalize(day);
-            var todaysEvent = matches.FirstOrDefault(e => FestivalDay.Normalize(e.Day) == today);
+            string day = FestivalDay.FromDayOfWeek(nowFestival.DayOfWeek);
+            var nowLocal = TimeOnly.FromDateTime(nowFestival);
 
-            if (todaysEvent != null)
+            // A session that runs past midnight still belongs to the day it started on: at 00:30
+            // the guest standing in the 21:00-01:30 line is in yesterday's queue, and the calendar
+            // has already moved on without them.
+            var yesterdaysSessions = SessionsOn(matches, FestivalDay.FromDayOfWeek(nowFestival.AddDays(-1).DayOfWeek));
+
+            if (ActivityDay.From(yesterdaysSessions)?.RunsPastMidnightInto(nowLocal) == true)
             {
-                return todaysEvent;
+                return yesterdaysSessions;
+            }
+
+            var todaysSessions = SessionsOn(matches, day);
+
+            if (todaysSessions.Length > 0)
+            {
+                return todaysSessions;
             }
 
             // Nothing runs today - the festival has not started, or this activity is not on
             // today. Hand back the next day it does run rather than nothing at all, so
             // scanning a sign still works while the festival is being set up.
-            var byDay = matches
-                .OrderBy(e => FestivalDay.Rank(e.Day))
-                .ThenBy(e => e.RowKey)
-                .ToArray();
+            var nextDay = matches
+                .Select(e => FestivalDay.Normalize(e.Day))
+                .Distinct()
+                .OrderBy(d => FestivalDay.Rank(d))
+                .FirstOrDefault(d => FestivalDay.Rank(d) >= FestivalDay.Rank(day));
 
-            return byDay.FirstOrDefault(e => FestivalDay.Rank(e.Day) >= FestivalDay.Rank(day))
-                ?? byDay[0];
+            nextDay ??= matches
+                .Select(e => FestivalDay.Normalize(e.Day))
+                .OrderBy(d => FestivalDay.Rank(d))
+                .First();
+
+            return SessionsOn(matches, nextDay);
         }
+
+        public async Task<Event[]> ReadSessionsForEvent(Event evt)
+        {
+            if (string.IsNullOrWhiteSpace(evt.QrCode))
+            {
+                // No code means no group: nothing else can resolve to this row's queue.
+                return [evt];
+            }
+
+            var matches = await ReadEventsByQrCode(evt.QrCode);
+            var sessions = SessionsOn(matches, FestivalDay.Normalize(evt.Day));
+
+            // The row itself is always part of its own group, even if the table read raced a
+            // code change and came back without it.
+            return sessions.Any(e => e.RowKey == evt.RowKey) ? sessions : ActivityDay.InOrder([evt]);
+        }
+
+        /// <summary>The rows running on one festival day, in the order their sessions run.</summary>
+        private static Event[] SessionsOn(Event[] matches, string normalizedDay) =>
+            ActivityDay.InOrder(matches.Where(e => FestivalDay.Normalize(e.Day) == normalizedDay));
 
         public async Task RecordServiceCompletion(string eventId)
         {

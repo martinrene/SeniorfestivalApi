@@ -36,10 +36,21 @@ public class QueueDone
             return new BadRequestResult();
         }
 
-        QueueNumber? ticket = await queueNumberRepository.MarkDone(data.EventId, data.Number);
+        // The day's sessions share one queue, kept on the first of them, so a screen opened on
+        // any session of the activity marks the ticket off the same list.
+        Event? evt = await eventRepository.FindById(data.EventId);
+        if (evt == null)
+        {
+            return new NotFoundResult();
+        }
+
+        var day = ActivityDay.From(await eventRepository.ReadSessionsForEvent(evt));
+        string hostId = day?.Host.RowKey ?? evt.RowKey;
+
+        QueueNumber? ticket = await queueNumberRepository.MarkDone(hostId, data.Number);
         if (ticket != null)
         {
-            await eventRepository.RecordServiceCompletion(data.EventId);
+            await eventRepository.RecordServiceCompletion(hostId);
         }
 
         return new AcceptedResult();

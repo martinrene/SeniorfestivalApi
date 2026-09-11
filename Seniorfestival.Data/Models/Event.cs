@@ -23,10 +23,6 @@ namespace Seniorfestival.Data.Models
         // Up to the 3 most recent per-person service gaps in minutes, most recent first, comma separated.
         public string? RecentServiceMinutes { get; set; }
 
-        // Comma separated open-close windows for the activity's day, e.g. "09:00-12:00,13:00-17:00,18:00-21:00".
-        // One set per event - update it if the hours change from one festival day to the next.
-        public string? OpeningHours { get; set; }
-
         public int Id()
         {
             return Convert.ToInt32(this.RowKey);
@@ -50,39 +46,5 @@ namespace Seniorfestival.Data.Models
             return MinutesPerPerson ?? fallbackMinutesPerPerson;
         }
 
-        // Adjusts a raw queue-processing wait (position * minutes-per-person) so it doesn't count
-        // time the activity is closed - e.g. a lunch break between two opening windows.
-        public int EstimateWaitMinutes(int rawQueueWaitMinutes, TimeOnly nowLocal)
-        {
-            var windows = OpeningHoursCalculator.Parse(OpeningHours);
-            if (windows.Length == 0)
-            {
-                return rawQueueWaitMinutes;
-            }
-
-            OpeningHoursCalculator.TryAddOpenMinutes(nowLocal, windows, rawQueueWaitMinutes, out var servedAt);
-            var minutes = (servedAt - nowLocal).TotalMinutes;
-
-            if (minutes < 0)
-            {
-                // Opening hours are same-day only; guard against wrapping past midnight.
-                minutes += 24 * 60;
-            }
-
-            return Math.Max(0, (int)Math.Round(minutes));
-        }
-
-        // True if joining the queue right now would push a person's turn past the last open
-        // window for today - i.e. there are no more available spots left to hand out.
-        public bool WouldExceedOpeningHours(int rawQueueWaitMinutes, TimeOnly nowLocal)
-        {
-            var windows = OpeningHoursCalculator.Parse(OpeningHours);
-            if (windows.Length == 0)
-            {
-                return false;
-            }
-
-            return !OpeningHoursCalculator.TryAddOpenMinutes(nowLocal, windows, rawQueueWaitMinutes, out _);
-        }
     }
 }

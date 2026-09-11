@@ -62,6 +62,15 @@ public class QueuesAdmin
             return new NotFoundResult();
         }
 
+        // The day's sessions share one queue, so any of them opens the same list: work on the
+        // group rather than on whichever row the admin site happened to link to.
+        var day = ActivityDay.From(await eventRepository.ReadSessionsForEvent(evt));
+
+        if (day == null)
+        {
+            return new NotFoundResult();
+        }
+
         if (req.Method == "POST")
         {
             // Assigned first: req.Query returns StringValues, which cannot be matched
@@ -70,29 +79,33 @@ public class QueuesAdmin
 
             return action switch
             {
-                "join" => await Join(evt, req),
-                "done" => await MarkDone(evt, req),
+                "join" => await Join(day, req),
+                "done" => await MarkDone(day, req),
                 _ => Error("Ukendt handling. Brug action=join eller action=done."),
             };
         }
 
-        return await Queue(evt);
+        return await Queue(day);
     }
 
-    private async Task<IActionResult> Queue(Event evt)
+    private async Task<IActionResult> Queue(ActivityDay day)
     {
-        var queue = (await queueNumberRepository.ReadActiveQueueForEvent(evt.RowKey))
+        Event host = day.Host;
+
+        var queue = (await queueNumberRepository.ReadActiveQueueForEvent(host.RowKey))
             .OrderBy(q => q.Timestamp)
             .ToArray();
 
-        int minutesPerPerson = evt.EstimateMinutesPerPerson(DefaultMinutesPerPerson);
+        int minutesPerPerson = host.EstimateMinutesPerPerson(DefaultMinutesPerPerson);
 
         return new OkObjectResult(new
         {
-            eventId = evt.RowKey,
-            title = evt.Title,
-            qrCode = evt.QrCode,
-            openingHours = evt.OpeningHours,
+            eventId = host.RowKey,
+            title = host.Title,
+            qrCode = host.QrCode,
+            // Every session the queue runs across today, so the staff can see the list is
+            // shared and when it has to be emptied by.
+            sessions = day.SessionTimes,
             minutesPerPerson,
             totalInQueue = queue.Length,
             tickets = queue.Select((q, index) => new
@@ -109,12 +122,12 @@ public class QueuesAdmin
     }
 
     /// <summary>
-    /// Puts a guest without the app at the back of the queue. The opening-hours check the
-    /// app does before letting someone join is deliberately skipped: that one stops people
-    /// taking a slot that no longer exists, while this is the staff standing at the
-    /// activity deciding to let one more in.
+    /// Puts a guest without the app at the back of the queue. The check the app does before
+    /// letting someone join - whether their turn would fall after the day's last session -
+    /// is deliberately skipped: that one stops people taking a slot that no longer exists,
+    /// while this is the staff standing at the activity deciding to let one more in.
     /// </summary>
-    private async Task<IActionResult> Join(Event evt, HttpRequest req)
+    private async Task<IActionResult> Join(ActivityDay day, HttpRequest req)
     {
         var request = await ReadRequest(req);
         string name = (request?.Name ?? "").Trim();
@@ -136,14 +149,14 @@ public class QueuesAdmin
         // another, and ReadActiveQueueForPhone is only called with an id the app supplied.
         string phoneId = WalkInPhoneIdPrefix + Guid.NewGuid().ToString("N");
 
-        var ticket = await queueNumberRepository.AddToQueue(evt.RowKey, phoneId, name);
+        var ticket = await queueNumberRepository.AddToQueue(day.Host.RowKey, phoneId, name);
         _logger.LogInformation(
-            "Added walk-in queue number {Number} to activity {EventId}", ticket.Number, evt.RowKey);
+            "Added walk-in queue number {Number} to activity {EventId}", ticket.Number, day.Host.RowKey);
 
-        return await Queue(evt);
+        return await Queue(day);
     }
 
-    private async Task<IActionResult> MarkDone(Event evt, HttpRequest req)
+    private async Task<IActionResult> MarkDone(ActivityDay day, HttpRequest req)
     {
         var request = await ReadRequest(req);
 
@@ -152,7 +165,8 @@ public class QueuesAdmin
             return Error("Kønummer mangler.");
         }
 
-        var ticket = await queueNumberRepository.MarkDone(evt.RowKey, request.Number.Trim());
+        Event host = day.Host;
+        var ticket = await queueNumberRepository.MarkDone(host.RowKey, request.Number.Trim());
 
         if (ticket == null)
         {
@@ -161,14 +175,16 @@ public class QueuesAdmin
         }
 
         // Feeds the measured minutes-per-person the wait estimate prefers over the manual value.
-        await eventRepository.RecordServiceCompletion(evt.RowKey);
-        _logger.LogInformation("Marked queue number {Number} done for activity {EventId}", ticket.Number, evt.RowKey);
+        await eventRepository.RecordServiceCompletion(host.RowKey);
+        _logger.LogInformation("Marked queue number {Number} done for activity {EventId}", ticket.Number, host.RowKey);
 
-        // The event was just rewritten by RecordServiceCompletion, so re-read it rather than
+        // The host was just rewritten by RecordServiceCompletion, so re-read it rather than
         // reporting a minutes-per-person estimate from before this completion.
-        var updated = await eventRepository.FindById(evt.RowKey) ?? evt;
+        var updated = await eventRepository.FindById(host.RowKey);
 
-        return await Queue(updated);
+        return await Queue(updated == null
+            ? day
+            : ActivityDay.From(day.Sessions.Select(e => e.RowKey == updated.RowKey ? updated : e))!);
     }
 
     private static bool IsWalkIn(QueueNumber ticket) =>

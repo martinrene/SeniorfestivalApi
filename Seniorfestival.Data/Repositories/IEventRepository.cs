@@ -8,11 +8,17 @@ namespace Seniorfestival.Data.Repositories
         Task<Event[]> ReadEventsByPartition(string partitionKey);
         Task<Event?> FindById(string eventId);
         /// <summary>
-        /// The row a guest scanning <paramref name="qrCode"/> on <paramref name="day"/>
-        /// should be queued for. An activity running several days is one printed code and
-        /// one row per day, each with its own queue.
+        /// The sessions a guest scanning <paramref name="qrCode"/> at <paramref name="nowFestival"/>
+        /// should be queued for. One printed code covers every row of the same activity: the days
+        /// it runs, and the times it runs on each of them. Empty when the code is unknown.
         /// </summary>
-        Task<Event?> FindByQrCode(string qrCode, string day);
+        Task<Event[]> FindSessionsByQrCode(string qrCode, DateTime nowFestival);
+
+        /// <summary>
+        /// The sessions sharing <paramref name="evt"/>'s code and day - the group whose queue
+        /// its tickets belong to. Just the row itself when it carries no code.
+        /// </summary>
+        Task<Event[]> ReadSessionsForEvent(Event evt);
 
         /// <summary>Every row carrying <paramref name="qrCode"/>, across all days.</summary>
         Task<Event[]> ReadEventsByQrCode(string qrCode);

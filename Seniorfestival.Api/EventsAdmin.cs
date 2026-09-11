@@ -11,8 +11,8 @@ namespace Seniorfestival.Api;
 
 /// <summary>
 /// Backend for the admin site's activity list. Read-only for everything the Google
-/// Sheet owns (title, time, location, ...) and writable only for the three fields
-/// the sheet has no column for: QrCode, MinutesPerPerson and OpeningHours.
+/// Sheet owns (title, time, location, ...) and writable only for the two fields
+/// the sheet has no column for: QrCode and MinutesPerPerson.
 /// Named EventsAdmin rather than AdminEvents because the Functions host reserves
 /// every route starting with "admin" and refuses to load the function.
 /// </summary>
@@ -25,7 +25,7 @@ public class EventsAdmin
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    // The QR code goes into an OData filter (FindByQrCode) and is scanned off a printed
+    // The QR code goes into an OData filter (FindSessionsByQrCode) and is scanned off a printed
     // sign, so it is kept to characters that are safe in both.
     private static readonly Regex AllowedQrCode = new("^[A-Za-z0-9_-]+$", RegexOptions.Compiled);
 
@@ -76,8 +76,13 @@ public class EventsAdmin
             .Where(e => e.Public && !string.IsNullOrWhiteSpace(e.Title))
             .ToArray();
 
-        // Only an activity with a QR code can be queued for, so only those need a count.
-        var queueLengths = await ReadQueueLengths(activities);
+        // One code on one day is one queue, however many sessions the activity runs that day.
+        var days = activities
+            .Where(e => !string.IsNullOrWhiteSpace(e.QrCode))
+            .GroupBy(GroupKey)
+            .ToDictionary(g => g.Key, g => ActivityDay.From(g)!);
+
+        var queueLengths = await ReadQueueLengths(days);
 
         // A shared code is deliberate, so the list has to be able to say so rather than
         // leaving it looking like the same code was pasted in twice by mistake.
@@ -91,28 +96,50 @@ public class EventsAdmin
         return new OkObjectResult(activities
             .Select(e => ToDto(
                 e,
-                queueLengths.TryGetValue(e.RowKey, out var length) ? length : null,
-                OtherDays(sharingCode.GetValueOrDefault(e.QrCode ?? "", []), e))));
+                queueLengths.TryGetValue(GroupKey(e), out var length) ? length : null,
+                OtherDays(sharingCode.GetValueOrDefault(e.QrCode ?? "", []), e),
+                OtherSessions(days.GetValueOrDefault(GroupKey(e)), e))));
     }
 
+    /// <summary>The queue a row's tickets go in: its QR code on its festival day.</summary>
+    private static (string QrCode, string Day) GroupKey(Event evt) =>
+        (evt.QrCode ?? "", FestivalDay.Normalize(evt.Day));
+
     /// <summary>
-    /// The days, in festival order, that other rows sharing this row's QR code run on.
+    /// The days, in festival order, that other rows sharing this row's QR code run on. The
+    /// row's own day is left out - other sessions on it are the same queue, not another one.
     /// </summary>
     private static string[] OtherDays(Event[] sharing, Event evt) => sharing
-        .Where(e => e.RowKey != evt.RowKey)
         .Select(e => FestivalDay.Normalize(e.Day))
+        .Where(day => day != FestivalDay.Normalize(evt.Day))
         .Distinct()
         .OrderBy(day => FestivalDay.Rank(day))
         .ToArray();
 
-    private async Task<Dictionary<string, int>> ReadQueueLengths(Event[] activities)
+    /// <summary>
+    /// The times of the other sessions this row shares its queue with today, so the UI can
+    /// show that the same list is handed out across all of them.
+    /// </summary>
+    private static string[] OtherSessions(ActivityDay? day, Event evt) => day == null
+        ? []
+        : day.Sessions
+            .Where(e => e.RowKey != evt.RowKey)
+            .Select(e => SessionWindow.FromEvent(e)?.ToString())
+            .Where(times => times != null)
+            .Select(times => times!)
+            .ToArray();
+
+    /// <summary>
+    /// One count per queue - read off the day's first session, where the shared tickets live -
+    /// so every session of that day reports the same length.
+    /// </summary>
+    private async Task<Dictionary<(string, string), int>> ReadQueueLengths(
+        Dictionary<(string, string), ActivityDay> days)
     {
-        var queued = activities.Where(e => !string.IsNullOrWhiteSpace(e.QrCode)).ToArray();
+        var counts = await Task.WhenAll(days.Select(async entry =>
+            (entry.Key, Count: (await queueNumberRepository.ReadActiveQueueForEvent(entry.Value.Host.RowKey)).Length)));
 
-        var counts = await Task.WhenAll(queued.Select(async e =>
-            (e.RowKey, Count: (await queueNumberRepository.ReadActiveQueueForEvent(e.RowKey)).Length)));
-
-        return counts.ToDictionary(c => c.RowKey, c => c.Count);
+        return counts.ToDictionary(c => c.Key, c => c.Count);
     }
 
     private async Task<IActionResult> Update(string eventId, HttpRequest req)
@@ -132,7 +159,6 @@ public class EventsAdmin
         }
 
         string qrCode = (request.QrCode ?? "").Trim();
-        string openingHours = (request.OpeningHours ?? "").Trim();
 
         if (qrCode.Length > 0 && !AllowedQrCode.IsMatch(qrCode))
         {
@@ -144,86 +170,35 @@ public class EventsAdmin
             return Error("Minutter pr. person skal være mellem 1 og 240.");
         }
 
-        string? invalidOpeningHours = ValidateOpeningHours(openingHours);
-        if (invalidOpeningHours != null)
-        {
-            return Error(invalidOpeningHours);
-        }
-
-        // Sharing a code across days is the point: an activity that runs Friday to Sunday
-        // is one printed sign and one row per day, each with its own queue, and the guest's
-        // scan resolves to the row for the day they are standing there on. Two rows on the
-        // *same* day cannot be told apart that way, so that stays an error.
-        Event[] sharing = [];
-
-        if (qrCode.Length > 0)
-        {
-            sharing = await eventRepository.ReadEventsByQrCode(qrCode);
-            string day = FestivalDay.Normalize(evt.Day);
-
-            var clash = sharing.FirstOrDefault(e =>
-                e.RowKey != evt.RowKey && FestivalDay.Normalize(e.Day) == day);
-
-            if (clash != null)
-            {
-                return Error($"QR-koden bruges allerede af '{clash.Title}' samme dag.");
-            }
-        }
+        // Sharing a code is the point: an activity is one printed sign and one row per day
+        // it runs - and per time of day it runs - each scan resolving to the rows for the day
+        // the guest is standing there on. Several rows on the same day share one queue, so a
+        // guest joining in the morning keeps their place into the evening session.
+        Event[] sharing = qrCode.Length > 0 ? await eventRepository.ReadEventsByQrCode(qrCode) : [];
 
         evt.QrCode = qrCode.Length > 0 ? qrCode : null;
         evt.MinutesPerPerson = request.MinutesPerPerson;
-        evt.OpeningHours = openingHours.Length > 0 ? openingHours : null;
 
         await eventRepository.UpsertEvent(evt);
         _logger.LogInformation(
-            "Updated activity {EventId}: qrCode {QrCode}, minutesPerPerson {Minutes}, openingHours {OpeningHours}",
-            eventId, evt.QrCode, evt.MinutesPerPerson, evt.OpeningHours);
+            "Updated activity {EventId}: qrCode {QrCode}, minutesPerPerson {Minutes}",
+            eventId, evt.QrCode, evt.MinutesPerPerson);
 
-        var queueLength = evt.QrCode == null
+        // Built from the rows read before the save plus the row just written, so the group
+        // reflects the code this save assigned rather than the one it replaced.
+        var day = ActivityDay.From(sharing
+            .Where(e => e.RowKey != evt.RowKey && FestivalDay.Normalize(e.Day) == FestivalDay.Normalize(evt.Day))
+            .Append(evt));
+
+        var queueLength = day == null
             ? (int?)null
-            : (await queueNumberRepository.ReadActiveQueueForEvent(evt.RowKey)).Length;
+            : (await queueNumberRepository.ReadActiveQueueForEvent(day.Host.RowKey)).Length;
 
-        // Only this row was written, so the rows read before the save still describe the
-        // other days correctly.
-        return new OkObjectResult(ToDto(evt, queueLength, OtherDays(sharing, evt)));
-    }
-
-    /// <summary>
-    /// Rejects anything the queue estimate would silently drop: Parse() throws away windows
-    /// it cannot read, so a typo would leave the activity looking open around the clock.
-    /// </summary>
-    private static string? ValidateOpeningHours(string openingHours)
-    {
-        if (openingHours.Length == 0)
-        {
-            return null;
-        }
-
-        var parts = openingHours.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var windows = OpeningHoursCalculator.Parse(openingHours);
-
-        if (windows.Length != parts.Length)
-        {
-            return "Åbningstider skal skrives som fx 09:00-12:00,13:00-17:00.";
-        }
-
-        foreach (var window in windows)
-        {
-            if (window.End <= window.Start)
-            {
-                return "Et åbningsinterval skal slutte efter det starter.";
-            }
-        }
-
-        for (int i = 1; i < windows.Length; i++)
-        {
-            if (windows[i].Start < windows[i - 1].End)
-            {
-                return "Åbningsintervallerne må ikke overlappe hinanden.";
-            }
-        }
-
-        return null;
+        return new OkObjectResult(ToDto(
+            evt,
+            queueLength,
+            OtherDays(sharing.Where(e => e.RowKey != evt.RowKey).ToArray(), evt),
+            OtherSessions(day, evt)));
     }
 
     private static async Task<EventRequest?> ReadRequest(HttpRequest req)
@@ -239,7 +214,7 @@ public class EventsAdmin
         }
     }
 
-    private static object ToDto(Event evt, int? queueLength, string[] sharedDays) => new
+    private static object ToDto(Event evt, int? queueLength, string[] sharedDays, string[] sharedSessions) => new
     {
         eventId = evt.RowKey,
         title = evt.Title,
@@ -250,8 +225,9 @@ public class EventsAdmin
         qrCode = evt.QrCode,
         // Other days running the same printed code, so the UI can show it is on purpose.
         sharedDays,
+        // Other sessions today running the same code - they hand out one shared queue.
+        sharedSessions,
         minutesPerPerson = evt.MinutesPerPerson,
-        openingHours = evt.OpeningHours,
         // What the queue actually estimates with right now: measured service times win over
         // the manual value, so the admin can see when their number is not the one in use.
         estimatedMinutesPerPerson = evt.EstimateMinutesPerPerson(DefaultMinutesPerPerson),
@@ -265,6 +241,5 @@ public class EventsAdmin
     {
         public string? QrCode { get; set; }
         public int? MinutesPerPerson { get; set; }
-        public string? OpeningHours { get; set; }
     }
 }

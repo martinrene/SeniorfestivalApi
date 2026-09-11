@@ -38,7 +38,6 @@ public class Queues
         TimeZoneInfo festivalTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central Europe Standard Time");
         DateTime nowFestival = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, festivalTimeZone);
         TimeOnly nowLocal = TimeOnly.FromDateTime(nowFestival);
-        string today = FestivalDay.FromDayOfWeek(nowFestival.DayOfWeek);
 
         switch (req.Method)
         {
@@ -51,27 +50,30 @@ public class Queues
                     return new BadRequestResult();
                 }
 
-                // One sign can cover an activity that runs several days, and each day is its
-                // own row with its own queue - so which row this is depends on the date.
-                Event? evt = await eventRepository.FindByQrCode(data.QrCode, today);
-                if (evt == null)
+                // One sign covers every row of the activity: the days it runs, and the times it
+                // runs on each of them. The scan resolves to the day the guest is standing there
+                // on, and that day's sessions share one queue on the first of them.
+                var day = ActivityDay.From(await eventRepository.FindSessionsByQrCode(data.QrCode, nowFestival));
+                if (day == null)
                 {
                     return new NotFoundResult();
                 }
 
-                QueueNumber? existing = await queueNumberRepository.FindActiveQueueNumber(evt.RowKey, phoneId);
+                Event host = day.Host;
+
+                QueueNumber? existing = await queueNumberRepository.FindActiveQueueNumber(host.RowKey, phoneId);
                 if (existing == null)
                 {
-                    var activeQueueForEvent = await queueNumberRepository.ReadActiveQueueForEvent(evt.RowKey);
-                    int minutesPerPersonForJoin = evt.EstimateMinutesPerPerson(DefaultMinutesPerPerson);
+                    var activeQueueForEvent = await queueNumberRepository.ReadActiveQueueForEvent(host.RowKey);
+                    int minutesPerPersonForJoin = host.EstimateMinutesPerPerson(DefaultMinutesPerPerson);
                     int rawWaitMinutesForJoin = activeQueueForEvent.Length * minutesPerPersonForJoin;
 
-                    if (evt.WouldExceedOpeningHours(rawWaitMinutesForJoin, nowLocal))
+                    if (day.WouldRunPastLastSession(rawWaitMinutesForJoin, nowLocal))
                     {
                         return new ConflictObjectResult(new { message = "Der er ikke flere ledige pladser i køen i dag" });
                     }
 
-                    await queueNumberRepository.AddToQueue(evt.RowKey, phoneId, data.Name ?? "");
+                    await queueNumberRepository.AddToQueue(host.RowKey, phoneId, data.Name ?? "");
                 }
 
                 return new AcceptedResult();
@@ -86,11 +88,17 @@ public class Queues
                         .OrderBy(q => q.Timestamp)
                         .ToArray();
 
+                    // Tickets live on the day's first session, so the rest of that day's sessions
+                    // are what the wait still has to be served within.
                     var queueEvent = await eventRepository.FindById(queueNumber.EventId);
+                    var queueDay = queueEvent == null
+                        ? null
+                        : ActivityDay.From(await eventRepository.ReadSessionsForEvent(queueEvent));
+
                     int position = Array.FindIndex(activeQueue, q => q.RowKey == queueNumber.RowKey) + 1;
                     int minutesPerPerson = queueEvent?.EstimateMinutesPerPerson(DefaultMinutesPerPerson) ?? DefaultMinutesPerPerson;
                     int rawWaitMinutes = (position - 1) * minutesPerPerson;
-                    int estimatedWaitMinutes = queueEvent?.EstimateWaitMinutes(rawWaitMinutes, nowLocal) ?? rawWaitMinutes;
+                    int estimatedWaitMinutes = queueDay?.EstimateWaitMinutes(rawWaitMinutes, nowLocal) ?? rawWaitMinutes;
 
                     response.Add(new QueueStatus
                     {

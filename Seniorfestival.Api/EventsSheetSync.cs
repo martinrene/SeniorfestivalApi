@@ -113,15 +113,14 @@ public class EventsSheetSync
                     Public = isPublic
                 };
 
-                // The queue fields live outside the sheet: QrCode, MinutesPerPerson and
-                // OpeningHours are edited on the admin site, and the service history is
-                // written by the queue itself. Dropping them here would silently reset
-                // every activity's queue setup on the next sync.
+                // The queue fields live outside the sheet: QrCode and MinutesPerPerson are
+                // edited on the admin site, and the service history is written by the queue
+                // itself. Dropping them here would silently reset every activity's queue
+                // setup on the next sync.
                 if (storedByRowKey.TryGetValue(rowKey, out var stored))
                 {
                     sheetEvent.QrCode = stored.QrCode;
                     sheetEvent.MinutesPerPerson = stored.MinutesPerPerson;
-                    sheetEvent.OpeningHours = stored.OpeningHours;
                     sheetEvent.LastServedAt = stored.LastServedAt;
                     sheetEvent.RecentServiceMinutes = stored.RecentServiceMinutes;
                 }
